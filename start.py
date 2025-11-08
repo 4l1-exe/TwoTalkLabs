@@ -1,22 +1,24 @@
-import subprocess
-import sys
 import os
+import sys
+import subprocess
 import socket
 import time
-import webbrowser
-from pathlib import Path
 import urllib.request
-import zipfile
-import shutil
+from pathlib import Path
+from zipfile import ZipFile
+import http.client
+import webbrowser
 
-# ----------------- Settings ----------------- #
+# ----------------- Config ----------------- #
 FFMPEG_DIR = Path(__file__).parent / "ffmpeg_bin"
-FFMPEG_EXEC = FFMPEG_DIR / "bin" / "ffmpeg.exe"  # Path after extracting
+FFMPEG_EXEC = FFMPEG_DIR / "bin" / "ffmpeg.exe" if os.name == "nt" else FFMPEG_DIR / "bin/ffmpeg"
+FFMPEG_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 REQUIREMENTS_FILE = Path(__file__).parent / "requirements.txt"
+SERVER_MODULE = "server:app"
 
-# ----------------- Utility Functions ----------------- #
+# ----------------- Utilities ----------------- #
 def find_free_port(start=8000, end=8100):
-    for port in range(start, end+1):
+    for port in range(start, end + 1):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
                 s.bind(("127.0.0.1", port))
@@ -25,87 +27,94 @@ def find_free_port(start=8000, end=8100):
                 continue
     raise RuntimeError(f"No free ports found between {start}-{end}")
 
-def run_command(cmd_list):
-    subprocess.run(cmd_list, check=True)
+def wait_for_server(port, timeout=15):
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=1)
+            conn.request("GET", "/")
+            res = conn.getresponse()
+            if res.status == 200:
+                return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    return False
 
-# ----------------- FFmpeg Setup ----------------- #
-def setup_ffmpeg():
+# ----------------- FFmpeg ----------------- #
+def download_ffmpeg():
     if FFMPEG_EXEC.exists():
-        print("✅ Bundled FFmpeg found")
+        print(f"✅ Bundled FFmpeg found at {FFMPEG_EXEC}")
         os.environ["PATH"] = str(FFMPEG_DIR / "bin") + os.pathsep + os.environ.get("PATH", "")
         return
 
-    print("⬇️ Downloading FFmpeg...")
+    print("⬇️ FFmpeg not found, downloading...")
+
     FFMPEG_DIR.mkdir(exist_ok=True)
-    url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
     zip_path = FFMPEG_DIR / "ffmpeg.zip"
 
-    # Download the zip
-    urllib.request.urlretrieve(url, zip_path)
+    def progress_hook(block_num, block_size, total_size):
+        downloaded = block_num * block_size
+        percent = min(downloaded / total_size * 100, 100)
+        print(f"\rDownloading FFmpeg: {percent:.2f}% ({downloaded}/{total_size} bytes)", end="")
 
-    # Extract zip
-    with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        # Extract contents directly into ffmpeg_bin
+    urllib.request.urlretrieve(FFMPEG_URL, filename=zip_path, reporthook=progress_hook)
+    print("\n✅ Download complete, extracting...")
+
+    with ZipFile(zip_path, "r") as zip_ref:
+        # Extract directly into FFMPEG_DIR
         for member in zip_ref.namelist():
-            # Skip root folder in zip
-            parts = member.split('/')
-            target = FFMPEG_DIR / '/'.join(parts[1:])
-            if member.endswith('/'):
+            # Strip root folder if exists
+            parts = Path(member).parts
+            target = FFMPEG_DIR / Path(*parts[1:]) if len(parts) > 1 else FFMPEG_DIR / Path(*parts)
+            if member.endswith("/"):
                 target.mkdir(parents=True, exist_ok=True)
             else:
+                target.parent.mkdir(parents=True, exist_ok=True)
                 with open(target, "wb") as f:
                     f.write(zip_ref.read(member))
 
     zip_path.unlink()
     os.environ["PATH"] = str(FFMPEG_DIR / "bin") + os.pathsep + os.environ.get("PATH", "")
-    print("✅ FFmpeg setup complete")
+    print(f"✅ FFmpeg is ready at {FFMPEG_EXEC}")
 
-# ----------------- Install Requirements ----------------- #
+# ----------------- Requirements ----------------- #
 def install_requirements():
-    if REQUIREMENTS_FILE.exists():
-        print("🚀 Installing Python packages...")
-        run_command([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
-        run_command([sys.executable, "-m", "pip", "install", "-r", str(REQUIREMENTS_FILE)])
-        print("✅ Python packages installed")
+    print("🚀 Installing Python requirements...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(REQUIREMENTS_FILE)], check=True)
+    print("✅ Requirements installed")
 
-# ----------------- Wait for Server ----------------- #
-def wait_for_server(host="127.0.0.1", port=8000, timeout=10):
-    start_time = time.time()
-    while True:
-        try:
-            with socket.create_connection((host, port), timeout=1):
-                return True
-        except (ConnectionRefusedError, OSError):
-            if time.time() - start_time > timeout:
-                raise RuntimeError("Server failed to start in time")
-            time.sleep(0.2)
-
-# ----------------- Main Routine ----------------- #
-def main():
-    install_requirements()
-    setup_ffmpeg()
-    port = find_free_port()
-    print(f"Starting server on port {port}...")
-
+# ----------------- Start Server ----------------- #
+def start_server(port):
+    print(f"🌐 Starting server on port {port}...")
     proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "server:app",
-         "--host", "127.0.0.1",
-         "--port", str(port),
-         "--reload"],
-        cwd=os.path.dirname(os.path.abspath(__file__)),
+        [sys.executable, "-m", "uvicorn", SERVER_MODULE, "--host", "127.0.0.1", "--port", str(port)],
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
+        stderr=subprocess.STDOUT,
+        cwd=os.path.dirname(os.path.abspath(__file__)),
+        text=True
     )
 
-    try:
-        wait_for_server(port=port)
-        url = f"http://127.0.0.1:{port}"
-        print(f"✅ Server is ready at {url}")
-        webbrowser.open(url)
-        proc.wait()
-    finally:
-        proc.terminate()
-        print("Server process terminated.")
+    # Stream logs in real-time
+    while True:
+        line = proc.stdout.readline()
+        if line:
+            print(line, end="")
+        if wait_for_server(port, timeout=0.5):
+            webbrowser.open(f"http://127.0.0.1:{port}")
+            break
 
+    # Wait for process to finish
+    try:
+        proc.wait()
+    except KeyboardInterrupt:
+        proc.terminate()
+        proc.wait()
+
+# ----------------- Main ----------------- #
 if __name__ == "__main__":
-    main()
+    download_ffmpeg()
+    install_requirements()
+    port = find_free_port()
+    start_server(port)
