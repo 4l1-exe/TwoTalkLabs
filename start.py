@@ -11,27 +11,27 @@ import webbrowser
 
 # ----------------- Config ----------------- #
 FFMPEG_DIR = Path(__file__).parent / "ffmpeg_bin"
-FFMPEG_EXEC = FFMPEG_DIR / "bin" / "ffmpeg.exe" if os.name == "nt" else FFMPEG_DIR / "bin/ffmpeg"
+FFMPEG_EXEC = FFMPEG_DIR / "bin" / "ffmpeg.exe" if os.name == "nt" else FFMPEG_DIR / "bin" / "ffmpeg"
 FFMPEG_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 REQUIREMENTS_FILE = Path(__file__).parent / "requirements.txt"
 SERVER_MODULE = "server:app"
+HOST = "127.0.0.1"
+PORT = 8017
 
 # ----------------- Utilities ----------------- #
-def find_free_port(start=8000, end=8100):
-    for port in range(start, end + 1):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError(f"No free ports found between {start}-{end}")
+def find_free_port(port=PORT):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((HOST, port))
+            return port
+        except OSError:
+            raise RuntimeError(f"Port {port} is in use.")
 
 def wait_for_server(port, timeout=15):
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
-            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=1)
+            conn = http.client.HTTPConnection(HOST, port, timeout=1)
             conn.request("GET", "/")
             res = conn.getresponse()
             if res.status == 200:
@@ -44,7 +44,7 @@ def wait_for_server(port, timeout=15):
 # ----------------- FFmpeg ----------------- #
 def download_ffmpeg():
     if FFMPEG_EXEC.exists():
-        print(f"✅ Bundled FFmpeg found at {FFMPEG_EXEC}")
+        print(f"✅ FFmpeg already exists at {FFMPEG_EXEC}")
         os.environ["PATH"] = str(FFMPEG_DIR / "bin") + os.pathsep + os.environ.get("PATH", "")
         return
 
@@ -54,17 +54,16 @@ def download_ffmpeg():
     zip_path = FFMPEG_DIR / "ffmpeg.zip"
 
     def progress_hook(block_num, block_size, total_size):
-        downloaded = block_num * block_size
-        percent = min(downloaded / total_size * 100, 100)
-        print(f"\rDownloading FFmpeg: {percent:.2f}% ({downloaded}/{total_size} bytes)", end="")
+        downloaded_mb = block_num * block_size / (1024 * 1024)
+        total_mb = total_size / (1024 * 1024)
+        percent = min(downloaded_mb / total_mb * 100, 100)
+        print(f"\rDownloading FFmpeg: {percent:.2f}% ({downloaded_mb:.2f}/{total_mb:.2f} MB)", end="")
 
     urllib.request.urlretrieve(FFMPEG_URL, filename=zip_path, reporthook=progress_hook)
     print("\n✅ Download complete, extracting...")
 
     with ZipFile(zip_path, "r") as zip_ref:
-        # Extract directly into FFMPEG_DIR
         for member in zip_ref.namelist():
-            # Strip root folder if exists
             parts = Path(member).parts
             target = FFMPEG_DIR / Path(*parts[1:]) if len(parts) > 1 else FFMPEG_DIR / Path(*parts)
             if member.endswith("/"):
@@ -86,26 +85,30 @@ def install_requirements():
     print("✅ Requirements installed")
 
 # ----------------- Start Server ----------------- #
-def start_server(port):
-    print(f"🌐 Starting server on port {port}...")
+def start_server():
+    print(f"🌐 Starting server on http://{HOST}:{PORT} ...")
     proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", SERVER_MODULE, "--host", "127.0.0.1", "--port", str(port)],
+        [sys.executable, "-m", "uvicorn", SERVER_MODULE, "--host", HOST, "--port", str(PORT), "--reload"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         cwd=os.path.dirname(os.path.abspath(__file__)),
         text=True
     )
 
-    # Stream logs in real-time
+    # Stream logs and open browser when server is ready
+    opened = False
     while True:
         line = proc.stdout.readline()
         if line:
             print(line, end="")
-        if wait_for_server(port, timeout=0.5):
-            webbrowser.open(f"http://127.0.0.1:{port}")
+            if not opened and f"Uvicorn running on http://{HOST}:{PORT}" in line:
+                webbrowser.open(f"http://{HOST}:{PORT}")
+                opened = True
+
+        # Exit if process ends
+        if proc.poll() is not None:
             break
 
-    # Wait for process to finish
     try:
         proc.wait()
     except KeyboardInterrupt:
@@ -116,5 +119,4 @@ def start_server(port):
 if __name__ == "__main__":
     download_ffmpeg()
     install_requirements()
-    port = find_free_port()
-    start_server(port)
+    start_server()
