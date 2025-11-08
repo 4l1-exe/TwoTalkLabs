@@ -1,0 +1,141 @@
+/* Global Reset */
+* {
+    box-sizing: border-box;
+}
+
+/* Background — smooth gradient & glass effect */
+body {
+    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+    background-attachment: fixed;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    margin: 0;
+    padding: 40px 20px;
+    color: #e6e6e6;
+}
+
+/* Main container — glassmorphic chat bubble style */
+.container {
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 20px;
+    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.4);
+    max-width: 600px;
+    width: 100%;
+    padding: 30px 40px;
+    text-align: center;
+    animation: fadeIn 0.8s ease-in-out;
+}
+
+/* Title — clean, glowing accent */
+h1 {
+    margin-bottom: 25px;
+    font-size: 2rem;
+    color: #ffffff;
+    font-weight: 600;
+    text-shadow: 0 0 15px rgba(0, 200, 255, 0.4);
+}
+
+/* Textarea — frosted with glow focus */
+textarea {
+    width: 100%;
+    height: 120px;
+    padding: 14px;
+    font-size: 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    color: #f0f0f0;
+    resize: none;
+    transition: all 0.25s ease;
+    outline: none;
+}
+
+textarea::placeholder {
+    color: rgba(230, 230, 230, 0.6);
+}
+
+textarea:focus {
+    border-color: rgba(0, 200, 255, 0.7);
+    box-shadow: 0 0 12px rgba(0, 200, 255, 0.4);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Button — vibrant gradient + glow */
+button {
+    margin-top: 20px;
+    padding: 12px 26px;
+    font-size: 16px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #00c6ff, #0072ff);
+    color: white;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 4px 15px rgba(0, 114, 255, 0.4);
+    font-weight: 600;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 200, 255, 0.6);
+}
+
+/* Status text */
+#status {
+    margin-top: 18px;
+    font-weight: 500;
+    color: #b3eaff;
+}
+
+/* Audio players — rounded, spaced */
+audio {
+    margin-top: 20px;
+    width: 100%;
+    border-radius: 8px;
+    outline: none;
+}
+
+/* Progress bar — futuristic look */
+.progress-container {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 15px;
+    height: 20px;
+    display: none; /* Keep behavior */
+}
+
+#progress-bar {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #00f5ff, #00b8ff, #007bff);
+    text-align: center;
+    color: white;
+    line-height: 20px;
+    transition: width 0.3s ease;
+    border-radius: 10px;
+}
+
+/* Audio container spacing */
+#audioContainer {
+    margin-top: 20px;
+}
+
+/* Subtle fade-in animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

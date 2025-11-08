@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+requests
+moviepy
+ffmpeg-python
+python-dotenv
+python-multipart
+
+
+customtkinter
+
